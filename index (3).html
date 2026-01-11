@@ -1,0 +1,214 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SISTEMA DE TIMBRE - D.M.A. BURGOS</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React y Babel -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Tipografía Outfit -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800;900&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Outfit', sans-serif; 
+            background-color: #f8fafc;
+            color: #1e293b;
+        }
+        .bell-ring { 
+            animation: ring 0.6s ease-in-out infinite; 
+            display: inline-block; 
+        }
+        @keyframes ring {
+            0%, 100% { transform: rotate(0); }
+            15% { transform: rotate(20deg); }
+            30% { transform: rotate(-20deg); }
+            45% { transform: rotate(15deg); }
+            60% { transform: rotate(-15deg); }
+        }
+        .scroll-custom::-webkit-scrollbar {
+            width: 8px;
+        }
+        .scroll-custom::-webkit-scrollbar-thumb {
+            background-color: #e2e8f0;
+            border-radius: 20px;
+        }
+    </style>
+</head>
+<body class="bg-slate-50">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo, useRef } = React;
+
+        const HORARIO = [
+            { t: "08:25", n: "AVISO ENTRADA", d: 10 }, { t: "08:30", n: "ENTRADA CLASE", d: 15 },
+            { t: "09:20", n: "AVISO CAMBIO", d: 10 }, { t: "09:25", n: "CAMBIO CLASE", d: 15 },
+            { t: "10:15", n: "AVISO CAMBIO", d: 10 }, { t: "10:20", n: "CAMBIO CLASE", d: 15 },
+            { t: "11:10", n: "SALIDA RECREO", d: 15 }, { t: "11:35", n: "AVISO FIN RECREO", d: 10 },
+            { t: "11:40", n: "ENTRADA RECREO", d: 15 }, { t: "12:30", n: "AVISO CAMBIO", d: 10 },
+            { t: "12:35", n: "CAMBIO CLASE", d: 15 }, { t: "13:25", n: "AVISO CAMBIO", d: 10 },
+            { t: "13:30", n: "CAMBIO CLASE", d: 15 }, { t: "14:20", n: "AVISO CAMBIO", d: 10 },
+            { t: "14:25", n: "CAMBIO CLASE", d: 15 }, { t: "15:15", n: "FIN JORNADA (M)", d: 15 },
+            { t: "15:55", n: "AVISO TARDE", d: 10 }, { t: "16:00", n: "ENTRADA TARDE", d: 15 },
+            { t: "16:50", n: "AVISO CAMBIO", d: 10 }, { t: "16:55", n: "CAMBIO CLASE", d: 15 },
+            { t: "17:45", n: "AVISO CAMBIO", d: 10 }, { t: "17:50", n: "CAMBIO CLASE", d: 15 },
+            { t: "18:40", n: "SALIDA RECREO (T)", d: 15 }, { t: "18:55", n: "AVISO FIN RECREO (T)", d: 10 },
+            { t: "19:00", n: "ENTRADA TARDE", d: 15 }, { t: "19:50", n: "AVISO CAMBIO", d: 10 },
+            { t: "19:55", n: "CAMBIO CLASE", d: 15 }, { t: "20:45", n: "AVISO CAMBIO", d: 10 },
+            { t: "20:50", n: "CAMBIO CLASE", d: 15 }, { t: "21:40", n: "FIN JORNADA (T)", d: 15 }
+        ];
+
+        function App() {
+            const [now, setNow] = useState(new Date());
+            const [audioOn, setAudioOn] = useState(false);
+            const [ringing, setRinging] = useState(false);
+            const audioCtx = useRef(null);
+
+            useEffect(() => {
+                const interval = setInterval(() => {
+                    const d = new Date();
+                    setNow(d);
+                    const timeStr = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', hour12: false });
+                    if (d.getSeconds() === 0) {
+                        const event = HORARIO.find(h => h.t === timeStr);
+                        if (event && audioOn) playSound(event.d);
+                    }
+                }, 1000);
+                return () => clearInterval(interval);
+            }, [audioOn]);
+
+            const playSound = (dur) => {
+                if (!audioCtx.current) audioCtx.current = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.current.state === 'suspended') audioCtx.current.resume();
+                setRinging(true);
+                const osc = audioCtx.current.createOscillator();
+                const gain = audioCtx.current.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, audioCtx.current.currentTime);
+                gain.gain.setValueAtTime(0.5, audioCtx.current.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.current.currentTime + dur);
+                osc.connect(gain); gain.connect(audioCtx.current.destination);
+                osc.start(); osc.stop(audioCtx.current.currentTime + dur);
+                setTimeout(() => setRinging(false), dur * 1000);
+            };
+
+            const next = useMemo(() => {
+                const totalSecs = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+                return HORARIO.find(h => {
+                    const [hh, mm] = h.t.split(':').map(Number);
+                    return (hh * 3600 + mm * 60) > totalSecs;
+                }) || null;
+            }, [now]);
+
+            return (
+                <div className="max-w-2xl mx-auto min-h-screen flex flex-col p-6 md:p-12 space-y-10">
+                    {/* CABECERA ACTUALIZADA */}
+                    <header className="flex justify-between items-center bg-white p-6 rounded-[2rem] shadow-sm">
+                        <div className="flex items-center gap-4">
+                            <div className={`p-4 rounded-2xl shadow-md ${ringing ? 'bg-indigo-600 text-white' : 'bg-slate-50 text-indigo-600'}`}>
+                                <span className={`text-3xl block ${ringing ? 'bell-ring' : ''}`}>🔔</span>
+                            </div>
+                            <div>
+                                <h1 className="text-2xl font-black text-slate-800 uppercase leading-none">D.M.A. BURGOS</h1>
+                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">GGP | TIMBRE OFICIAL SINCRONIZADO</p>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={() => { setAudioOn(true); playSound(0.2); }}
+                            className={`px-6 py-3 rounded-2xl font-black text-sm transition-all transform active:scale-95 shadow-lg ${
+                                audioOn ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white animate-pulse'
+                            }`}
+                        >
+                            {audioOn ? '🔊 SISTEMA ACTIVO' : '🔇 ACTIVAR AUDIO'}
+                        </button>
+                    </header>
+
+                    {/* RELOJ GIGANTE */}
+                    <section className="bg-white rounded-[3rem] p-16 shadow-2xl text-center border-b-[12px] border-indigo-50">
+                        <p className="text-indigo-400 font-black text-xs uppercase tracking-[0.5em] mb-4">Reloj de Precisión</p>
+                        <h2 className="text-8xl md:text-9xl font-black text-slate-800 tabular-nums leading-none tracking-tighter">
+                            {now.toLocaleTimeString('es-ES', { hour12: false })}
+                        </h2>
+                        <div className="mt-8 inline-flex items-center gap-3 bg-indigo-50 px-6 py-2 rounded-full text-indigo-700 font-bold text-sm">
+                            <span className="w-2.5 h-2.5 bg-indigo-600 rounded-full animate-ping"></span>
+                            {now.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }).toUpperCase()}
+                        </div>
+                    </section>
+
+                    {/* PRÓXIMO EVENTO */}
+                    {next && (
+                        <div className="bg-slate-900 text-white p-10 rounded-[3rem] shadow-2xl relative overflow-hidden ring-[16px] ring-white">
+                            <div className="relative z-10 flex flex-col md:flex-row justify-between items-center gap-8">
+                                <div className="text-center md:text-left flex-1">
+                                    <p className="text-indigo-400 font-black text-xs uppercase tracking-widest mb-3">Siguiente Actividad</p>
+                                    <h3 className="text-4xl font-black mb-2">{next.n}</h3>
+                                    <p className="text-indigo-200 font-bold text-xl opacity-80">A las {next.t} horas</p>
+                                </div>
+                                <div className="bg-white/10 px-8 py-6 rounded-[2rem] border border-white/10 backdrop-blur-xl text-center min-w-[160px]">
+                                    <p className="text-5xl font-black tabular-nums text-white">
+                                        {Math.max(0, Math.floor((next.t.split(':')[0]*3600 + next.t.split(':')[1]*60 - (now.getHours()*3600 + now.getMinutes()*60 + now.getSeconds()))/60))}m
+                                    </p>
+                                    <p className="text-indigo-300 text-[10px] font-black uppercase tracking-tighter mt-1">Faltan</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* LISTA DE HORARIOS */}
+                    <div className="bg-white rounded-[3rem] p-10 shadow-xl flex flex-col border border-slate-100">
+                        <h4 className="font-black text-slate-400 text-xs tracking-[0.4em] uppercase mb-10 px-4 text-center">Programación Completa</h4>
+                        <div className="space-y-6 overflow-y-auto max-h-[500px] pr-4 scroll-custom">
+                            {HORARIO.map((h, i) => {
+                                const [hH, hM] = h.t.split(':').map(Number);
+                                const isNext = next?.t === h.t;
+                                const isPast = (hH * 3600 + hM * 60) < (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds());
+
+                                return (
+                                    <div key={i} className={`flex justify-between items-center p-6 rounded-[2rem] border-2 transition-all duration-500 ${
+                                        isNext ? 'border-indigo-600 bg-indigo-50/50 shadow-xl scale-[1.05] -translate-y-1' : 
+                                        isPast ? 'border-slate-50 bg-slate-50/30 opacity-20' : 
+                                        'border-slate-50 bg-slate-50/50 hover:border-slate-200'
+                                    }`}>
+                                        <div className="flex items-center gap-8">
+                                            <span className={`text-3xl font-black tabular-nums ${isNext ? 'text-indigo-600' : 'text-slate-300'}`}>
+                                                {h.t}
+                                            </span>
+                                            <div className="h-10 w-[3px] bg-slate-200 rounded-full"></div>
+                                            <div>
+                                                <span className={`text-lg font-black block ${isNext ? 'text-slate-900' : 'text-slate-500'}`}>
+                                                    {h.n}
+                                                </span>
+                                                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Duración: {h.d}s</span>
+                                            </div>
+                                        </div>
+                                        {isNext && (
+                                            <span className="bg-indigo-600 text-white text-[10px] font-black px-4 py-1.5 rounded-full animate-pulse shadow-lg">
+                                                SIGUIENTE
+                                            </span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                    
+                    {/* FOOTER ACTUALIZADO */}
+                    <footer className="py-12 text-center">
+                        <p className="text-[11px] text-slate-400 font-black uppercase tracking-[0.4em]">
+                            TIMBRE DIGITAL v6.0 • CREADOR: GGP • D.M.A. BURGOS
+                        </p>
+                    </footer>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
